@@ -1,0 +1,844 @@
+---
+title: "IMDB Data Analysis: Final Version"
+author: "Tatum Good, Kendall Leonard and Sophia Rabbanian"
+date: "2023-02-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+##Read In the Data
+
+```{r}
+#install.packages("tidyverse")
+library(tidyverse)
+IMDB<-read_csv("https://raw.githubusercontent.com/k-leonard/imdbdata/main/imdb_top_1000.csv")
+IMDB<-na.omit(IMDB)
+```
+
+## Wrangle the Data
+
+```{r}
+#Removing Min in Run time
+IMDB$RuntimeMin<- as.numeric(str_remove(IMDB$Runtime, "min"))
+
+```
+
+```{r}
+##Splitting the Genre Strings
+genres<-str_split(IMDB$Genre[2],", ", simplify = TRUE) #This splits the strings and turns them into a list, maybe I need them to be a factor if I am to iterate through them
+unique(genres)
+
+IMDB<-IMDB%>%
+  mutate(genre1=NA, 
+         genre2=NA, 
+         genre3=NA)
+
+for(i in 1:714){
+  genres<-str_split(IMDB$Genre[i],", ", simplify = TRUE)
+  
+  if(length(genres)>=1){
+    IMDB$genre1[i]<-genres[1]
+  }
+  
+    if(length(genres)>=2){
+    IMDB$genre2[i]<-genres[2]
+    }
+  
+    if(length(genres)==3){
+    IMDB$genre3[i]<-genres[3]
+    
+  }
+}
+
+```
+
+```{r}
+uniGen<-unique(c(IMDB$genre1, IMDB$genre2, IMDB$genre3))
+
+genreDat<-matrix(0, nrow=714, ncol=length(uniGen))
+colnames(genreDat)<-uniGen
+
+for(i in 1:714){
+  for(j in 1:length(uniGen)){
+    if(colnames(genreDat)[j] %in% str_split(IMDB$Genre[i],", ", simplify = TRUE)){
+      genreDat[i, j]=1
+    }
+  }
+}
+
+IMDB<-IMDB%>%
+  cbind(genreDat)
+IMDB<-IMDB[-c(32)]
+#View(IMDB)
+```
+
+```{r}
+
+
+#IMDB<-IMDB %>%
+ # mutate(certificate1=NA)
+
+
+
+for(i in 1:713){
+  certs<-str_split(IMDB$Certificate[i],", ", simplify = TRUE)
+  
+  if(length(certs)>=1){
+    IMDB$certificate[i]<-certs[1]
+  }
+
+}
+
+```
+
+```{r}
+unique_certificate<- unique(IMDB$Certificate)
+
+certificateDat<-matrix(0, nrow=714, ncol=length(unique_certificate))
+colnames(certificateDat)<-unique_certificate
+
+for(i in 1:713){
+  for(j in 1:length(unique_certificate)){
+    if(colnames(certificateDat)[j] %in% str_split(IMDB$Certificate[i],", ", simplify = TRUE)){
+      certificateDat[i, j]=1
+    }
+  }
+}
+
+IMDB<-IMDB%>%
+  cbind(certificateDat)
+IMDB<-IMDB[-c(32)]
+View(IMDB)
+```
+
+##Milestone #2 ####Step 0
+
+```{r}
+## step 0
+unique(IMDB$Certificate)
+IMDB%>%
+  group_by(Certificate)%>%
+  summarise(n=n())
+
+#install.packages("GGally")
+library(GGally)
+
+IMDB%>%
+  filter(Certificate%in% c("R", "U"))%>%
+  ggpairs(columns = c(7, 16, 18,17,4,15,9), 
+        ggplot2::aes(colour = Certificate))
+
+```
+
+####Step 1
+
+```{r}
+## step 1
+
+## response variable : IMDB_Rating;
+###categorical feature : the rating split into levels, 1:4, 4.1:7, 7.1:10, this on a scale from 1-10, this variable determines how well the movie was liked by registered IMDB users on a scale of 1-10, 1:4 = not very much, 4.1:7 = mediocre, 7.1:10 = well liked
+###numerical feature : the actual rating #, this is also on a scale from 1-10
+```
+
+####Step 2
+
+```{r}
+## step 2
+
+dim(IMDB) # 1000
+
+set.seed(123)
+
+train_Ind <- sample(1:714, 357)
+head(train_Ind)
+
+IMDB_train <- IMDB[train_Ind, ]
+IMDB_test <- IMDB[-train_Ind, ]
+```
+
+####Step 3
+
+```{r}
+## step 3
+ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_Rating))+
+  geom_jitter(alpha=.2)+
+  geom_smooth(method="lm", se=FALSE)
+
+mod1<-lm(IMDB_Rating~Gross, data=IMDB)
+summary(mod1)
+```
+
+####Step 4
+
+```{r}
+## step 4
+#parallel lines
+ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_Rating, color=genre1))+
+  geom_point()
+
+mod2<-lm(IMDB_Rating~Gross+(genre1=="Crime"), data=IMDB_train)
+summary(mod2)
+ ggplot(data=IMDB_train, aes(x=Gross, y= IMDB_Rating, color = genre1))+
+   geom_jitter()+
+   geom_abline(intercept=mod2$coefficients[1],
+               slope=mod2$coefficients[2], color = "red")+
+    geom_abline(intercept=mod2$coefficients[3],
+               slope=mod2$coefficients[4], color = "blue")
+   
+```
+
+```{r}
+## step 4
+#parallel lines
+
+mod2.1<-lm(IMDB_Rating~Gross+(genre1=="Crime")+(genre1=="Action"), data=IMDB_train)
+summary(mod2.1)
+ ggplot(data=IMDB_train, aes(x=Gross, y= IMDB_Rating, color = genre1))+
+   geom_jitter()+
+   geom_abline(intercept=mod2.1$coefficients[1],
+               slope=mod2.1$coefficients[2], color = "red")+
+    geom_abline(intercept=mod2.1$coefficients[3],
+               slope=mod2.1$coefficients[4], color = "blue")
+```
+
+####Step 5
+
+```{r}
+## step 5
+#multiple linear model with the interaction between the numeric and categorical variables
+mod3<- lm(IMDB_Rating ~ Gross*(genre1 == "Drama"),data=IMDB_train)
+mod5<-lm(IMDB_Rating~Gross*(genre1=="Mystery"), data=IMDB_train)
+mod3.2<-lm(IMDB_Rating~Gross*(genre1=="Crime"), data=IMDB_train)
+#mod3<-lm(charges~bmi*smoker, data=insurance)
+summary(mod3)
+
+#ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_rating, color=Certificate%in% c("R", "U")))+
+  #geom_point()
+
+mod3$coefficients
+
+## Reference
+yint_0<-mod3$coefficients[1]
+slope_0<-mod3$coefficients[2]
+
+## Alternative
+yint_1<-yint_0+mod3$coefficients[3]
+slope_1<-slope_0+mod3$coefficients[4]
+
+
+yint_2<-yint_0+mod3$coefficients[5]
+slope_2<-slope_0+mod3$coefficients[6]
+
+yint_3<-yint_0+mod5$coefficients[3]
+slope_3<-slope_0+mod5$coefficients[4]
+
+yint_4<-yint_0+mod3.2$coefficients[3]
+slope_4<-slope_0+mod3.2$coefficients[4]
+ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_Rating, color=genre1))+
+  geom_point()+
+  geom_abline(intercept=yint_1, 
+              slope=slope_1, color="blue")+
+  geom_abline(intercept=yint_0, 
+              slope=slope_0, color="red")+
+  geom_abline(intercept=yint_4, 
+              slope=slope_4, color="green")+
+   geom_abline(intercept=yint_3, 
+              slope=slope_3, color="pink")
+
+```
+
+```{r}
+## step 5
+
+mod3<- lm(IMDB_Rating ~ Gross*(genre1=="Crime"), data=IMDB_train)
+#mod3<-lm(charges~bmi*smoker, data=insurance)
+summary(mod3)
+
+#ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_rating, color=Certificate%in% c("R", "U")))+
+  #geom_point()
+
+mod3$coefficients
+
+## Reference
+yint_0<-mod3$coefficients[1]
+slope_0<-mod3$coefficients[2]
+
+## Alternative
+yint_1<-yint_0+mod3$coefficients[3]
+slope_1<-slope_0+mod3$coefficients[4]
+
+
+ggplot(data=IMDB_train, aes(x=Gross, y=IMDB_Rating, color=genre1))+
+  geom_jitter()+ 
+  geom_smooth(method="lm", se=FALSE, color='black')+
+  ggtitle("Multiple Linear Model: IMDb Rating")+
+  geom_abline(intercept=yint_0, 
+              slope=slope_0 , color="red")+
+  facet_wrap(.~genre1)
+
+```
+
+```{r}
+DRAMA<-IMDB%>%
+  gather(key="")
+```
+
+####Step 6
+
+```{r}
+## step 6
+
+library(caret)
+
+testPred<- predict(mod1, IMDB_test)
+RMSE(testPred, IMDB_test$IMDB_Rating, na.rm=TRUE)
+
+testPred2<- predict(mod2, IMDB_test)
+RMSE(testPred2, IMDB_test$IMDB_Rating, na.rm=TRUE)
+
+testPred3<- predict(mod3, IMDB_test)
+RMSE(testPred3, IMDB_test$IMDB_Rating, na.rm=TRUE)
+
+```
+
+####Step 7
+
+```{r}
+###Step 7
+
+#The model with the lowest RMSE is: Model 3
+
+```
+
+##MILESTONE 3
+
+####Step 2 #####Polynomial
+
+```{r}
+### How many polynomial terms should we add?
+## DEGREE 1: Linear Model
+model_1 <- lm(IMDB_Rating~RuntimeMin, data=IMDB)
+
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=model_1$fitted.values), color="red", size=1)+
+  ggtitle("Degree 1")
+
+## Degree 2: Quadratic
+model_2 <- lm(IMDB_Rating~poly(RuntimeMin,2), data=IMDB)
+
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=model_2$fitted.values), color="red", size=1)+
+  ggtitle("Degree 2")
+
+## Degree 3: Cubic
+model_3 <- lm(IMDB_Rating~poly(RuntimeMin, 3), data=IMDB)
+
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=model_3$fitted.values), color="red", size=1)+
+  ggtitle("Degree 3")
+
+## Degree 5
+model_5 <- lm(IMDB_Rating~poly(RuntimeMin, 5), data=IMDB)
+
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=model_5$fitted.values), color="red", size=1)+
+  ggtitle("Degree 5")
+
+## Degree 10
+model_10 <- lm(IMDB_Rating~poly(RuntimeMin, 10), data=IMDB)
+
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=model_10$fitted.values), color="red", size=1)+
+  ggtitle("Degree 10")
+
+
+```
+
+```{r}
+#Statsy Way
+summary(model_1)
+summary(model_2)
+summary(model_3)
+summary(model_5)
+summary(model_10)
+```
+
+```{r}
+# setup
+RMSE1 <- data.frame('kth.order' = NA, 'RMSE' = NA, 'TestRMSE'=NA) # empty data frame to store RMSE
+vals <- list('Minutes' <- seq(min(IMDB$RuntimeMin), max(IMDB$RuntimeMin), by = 0.1)) # set up vector used for prediction
+
+## THIS IS CALLED A GRID SEARCH
+#k-th order
+k <- 1:8
+
+# run  loop
+for (i in 1:length(k)){
+  # build models
+  model <- lm(IMDB_Rating ~ poly(RuntimeMin,k[i]), data = IMDB)
+  
+  # calculate RSME and store it for further usage
+  RMSE1[i,1] <- k[i] # store k-th order
+  RMSE1[i,2] <- sqrt(sum((fitted(model)-IMDB_train$IMDB_Rating)^2)/length(IMDB_train$IMDB_Rating)) # calculate RSME
+  
+  predTest<-predict(model, IMDB_test)
+  
+  RMSE1[i, 3]<-sqrt(sum((predTest-IMDB_test$IMDB_Rating)^2)/length(IMDB_test$IMDB_Rating)) # calculate RSME
+
+}
+
+## USE GATHER TO CREATE A NEW COL TO DIFFERENTIATE THE TYPE OF RMSE
+RMSE1%>%
+  gather(key="Type", value="thisRMSE", -c(kth.order))%>%
+  ggplot(aes(x=kth.order, y=thisRMSE, color=Type))+
+  geom_line()
+```
+
+###GAM
+
+```{r}
+library(mgcv)
+
+mod_gam<-gam(IMDB_Rating~s(RuntimeMin), data=IMDB)
+summary(mod_gam)
+
+mod_gam1<-gam(IMDB_Rating~s(Gross), data=IMDB)
+summary(mod_gam1)
+
+#mod_gam2<-gam(IMDB_Rating~s(genre1), data=IMDB)
+#summary(mod_gam2)
+```
+
+```{r}
+ggplot(IMDB, aes(x=RuntimeMin, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=mod_gam$fitted.values), color="red", size=1)+
+  geom_line(aes(y=model_3$fitted.values), color="blue", size=1)+
+  ggtitle("GAM Model (Red) vs Poly 3 (Blue)")
+```
+
+```{r}
+ggplot(IMDB, aes(x=Gross, y=IMDB_Rating))+
+  geom_point()+
+  geom_line(aes(y=mod_gam1$fitted.values), color="red", size=1)+
+  geom_line(aes(y=model_3$fitted.values), color="blue", size=1)+
+  ggtitle("GAM Model (Red) vs Poly 3 (Blue)")
+```
+
+####3 AND 4
+
+```{r}
+IMDB33<-na.omit(IMDB)
+IMDB34<-IMDB33%>%select(RuntimeMin,IMDB_Rating, Gross)
+IMDB34<-na.omit(IMDB34)
+### HOLD MANY FOLDS
+kf<-5
+
+### RANDOM SPLIT INTO K FOLDS
+### RANDOM INDEXES
+ind<-sample(1:710)
+
+### CREATE DF
+folds<-data.frame(ind, 
+                  fold=rep(1:kf, 710/kf))
+
+folds<-na.omit(folds)
+## assigning each into a fold
+
+### ADD ON COLUMNS TO ORIGINAL DAT
+foldPoly<-IMDB34[ind,]%>%
+  cbind(folds)
+foldPoly<-na.omit(foldPoly)
+### INITIALIZE RMSE DATAFRAME TO HOLD OUTPUT
+RMSE <- data.frame('fold' = NA, 'kth.order' = NA, 'RMSE' = NA, 'TestRMSE'=NA) # empty data frame to store RMSE
+
+### LOOP FOR CROSS-VALIDATION
+for(i in 1:kf){
+  IMDB_train1<-foldPoly%>%
+    filter(fold!=i)
+  
+  IMDB_train1<-na.omit(IMDB_train1)
+  IMDB_test1<-foldPoly%>%
+    filter(fold==i)
+  IMDB_test<-na.omit(IMDB_test1)
+  ### INNER LOOP FOR POLY DEGREE
+  k <- 1:15 #k-th order
+  
+  for (j in 1:length(k)){
+    row<-length(k)*(i-1)+j
+    
+    # build models
+    model <- lm(IMDB_train1$IMDB_Rating ~ poly(IMDB_train1$RuntimeMin,k[j]))
+  
+    # calculate RSME and store it for further usage
+    RMSE[row,1] <-i
+    RMSE[row,2] <- k[j] # store k-th order
+    RMSE[row,3] <- sqrt(sum((fitted(model)-IMDB_train1$IMDB_Rating)^2)/length(IMDB_train1$IMDB_Rating)) # calculate RSME
+    
+    predTest<-predict(model, IMDB_test)
+    
+    RMSE[row, 4]<-sqrt(sum((predTest-IMDB_test1$IMDB_Rating)^2)/length(IMDB_test1$IMDB_Rating)) # calculate RSME
+    
+  }
+}
+
+
+ggplot(RMSE, aes(x=kth.order, y=RMSE, color=as.factor(fold)))+
+  geom_line()+
+  geom_point()+
+  ggtitle("Training RMSE")
+
+ggplot(RMSE, aes(x=kth.order, y=TestRMSE, color=as.factor(fold)))+
+  geom_line()+
+  geom_point()+
+  ggtitle("Testing RMSE")
+
+### TIDY GRAPHICS TO PLOT TOGETHER
+tidyRMSE<-RMSE%>%
+  gather(key="Type", value="thisRMSE", -c(fold, kth.order))
+
+#View(tidyRMSE)
+
+ggplot(tidyRMSE, aes(x=as.factor(kth.order), y=thisRMSE, fill=Type))+
+  geom_boxplot()+
+  ylim(c(.25, .6))+
+  ggtitle("Observe the Bias-Variance Trade-off")
+
+ggplot(tidyRMSE, aes(x=kth.order, y=thisRMSE, 
+                     color=Type, lty=as.factor(fold)))+
+  geom_line()+
+  ylim(c(.25, .6))
+
+
+```
+
+##MILESTONE 4 ##MILESTONE 4 #####Part 1: LOOCV
+
+```{r}
+library(leaps)
+model.fwrd <- regsubsets(IMDB_Rating ~ RuntimeMin + Gross + 
+                           No_of_Votes +
+                           genre1+ Certificate,
+                         data = IMDB, 
+                         nvmax = 140,
+                         method = "forward")
+summary(model.fwrd)
+```
+
+```{r}
+model.bw<- regsubsets(IMDB_Rating ~ RuntimeMin + Gross + 
+                           No_of_Votes +
+                           genre1+Certificate,
+                         data = IMDB, 
+                         nvmax = 140,
+                         method = "backward")
+summary(model.bw)
+```
+
+```{r}
+model.best <- regsubsets(IMDB_Rating ~ RuntimeMin + Gross + 
+                           No_of_Votes +
+                           genre1+Certificate,
+                         data = IMDB, 
+                         nvmax = 140)
+summary(model.best)
+```
+
+<https://rpubs.com/hsmalley/data252_5a> \<- This link should be helpful!!! ####Step 1 (PLEASE LET ME KNOW IF SOMETHING ERRORS I DID ALTER THE DATA AGAIN)
+
+```{r}
+predict.regsubsets <- function(object, newdata, id,...){
+  form  <- as.formula(object$call[[2]])
+  mat   <- model.matrix(form, newdata)
+  coefi <- coef(object, id=id)
+  mat[, names(coefi)]%*%coefi
+}
+
+
+```
+
+```{r}
+#store the prediction error n=252
+jk.errors <- matrix(NA, 395, 6) 
+#install.packages("leaps")
+library(leaps)
+
+for (k in 1:395){
+  #uses regsubsets in the data with 1 observation removed 
+  best.model.cv <- regsubsets(IMDB_Rating ~ RuntimeMin + Gross + 
+                           No_of_Votes+genre1+Meta_score+Certificate, 
+                         data = IMDB[-k,], 
+                         nvmax = 6)
+  
+  #Models with 4 predictors
+  for (i in 1:6){
+    #that was left out
+    newDat<-IMDB[k,]
+    newDat$genre1<-factor(newDat$genre1, 
+                          levels=unique(IMDB$genre1))
+    newDat$Certificate<-factor(newDat$Certificate,
+                               levels=unique(IMDB$Certificate))
+    pred <- predict.regsubsets(best.model.cv,                 #prediction in the obsv 
+                    newDat, 
+                    id=i)
+    jk.errors[k,i] <- (IMDB$IMDB_Rating[k]-pred)^2       #error in the obsv 
+  }
+}
+
+mse.models <- apply(jk.errors, 2, mean)            #MSE estimation 
+plot(mse.models ,                              #Plot with MSEs
+     pch=19, type="b",
+     xlab="nr predictors",
+     ylab="MSE")
+```
+
+####RIDGE
+
+```{r}
+### ridge
+#install.packages(c("glmnet", "faraway"))
+library(glmnet)   #function for ridge regression
+
+library(faraway) #has the dataset fat
+set.seed(371)
+
+#RIDGE REGRESSION
+
+#RIDGE REGRESSION
+
+#we need to define the model equation
+X <- model.matrix(IMDB_Rating ~ RuntimeMin + Gross + 
+                           No_of_Votes+genre1+Meta_score+Certificate, data=IMDB)[,-1]
+#and the outcome
+Y <- IMDB[,"IMDB_Rating"] 
+
+#Penalty type (alpha=0 is ridge)
+cv.lambda <- cv.glmnet(x=X, y=Y, 
+                       alpha = 0,
+                       lambda=exp(seq(-5,8,.1)))  
+
+plot(cv.lambda) 
+
+cv.lambda$lambda.min 
+
+#ridge path
+plot(cv.lambda$glmnet.fit, 
+     "lambda", label=FALSE)
+
+lmin        <- cv.lambda$lambda.min
+ridge.model <- glmnet(x=X, y=Y,
+                      alpha = 0, 
+                      lambda = lmin)
+ridge.model$beta
+```
+
+####LASSO METHOD
+
+```{r}
+
+#LASSO METHOD
+#Penalty type (alpha=1 is lasso 
+#and alpha=0 is the ridge)
+cv.lambda.lasso <- cv.glmnet(x=X, y=Y, 
+                             alpha = 1) 
+plot(cv.lambda.lasso)                        #MSE for several lambdas
+
+cv.lambda.lasso
+
+plot(cv.lambda.lasso$glmnet.fit, 
+     "lambda", label=TRUE)
+
+l.lasso.min <- cv.lambda.lasso$lambda.min
+l.lasso.min
+
+lasso.model <- glmnet(x=X, y=Y,
+                      alpha  = 1, 
+                      lambda = l.lasso.min)
+lasso.model$beta
+
+
+```
+
+```{r}
+## In the Ridge model above, the MSE is the same even as lambda changes. For the Lasso model, the MSE changes as lambda changes, the best value (with the smallest MSE) is when lambda is at 12.
+```
+
+##Regression Tree
+
+```{r}
+#install.packages("rpart")
+#install.packages("rpart.plot")
+library(rpart)  #library for CART
+library(rpart.plot)
+
+```
+
+```{r}
+defaultTree <- rpart(IMDB_Rating~Gross, data=IMDB, method="anova")
+
+rpart.plot(defaultTree)
+```
+
+```{r}
+fullTree <- rpart(IMDB_Rating~Gross,
+                  data=IMDB, 
+                  method="anova",
+                  control=rpart.control(
+                  minsplit=1,
+                  minbucket=1,
+                  cp=0
+                  
+                  ))
+
+rpart.plot(fullTree)  
+```
+
+```{r}
+plotcp(fullTree) 
+
+printcp(fullTree) 
+
+## MIN ERROR
+which.min(fullTree$cptable[,"xerror"])
+
+## WHICH CP
+fullTree$cptable[which.min(fullTree$cptable[,"xerror"]),"CP"]
+```
+
+```{r}
+pruneTree <- prune(fullTree, cp=0.013)   #prune the tree with cp=0.02
+
+printcp(pruneTree)
+
+rpart.plot(pruneTree)  
+```
+
+```{r}
+defaultTree1 <- rpart(IMDB_Rating~RuntimeMin, data=IMDB, method="anova")
+
+rpart.plot(defaultTree1)
+```
+
+```{r}
+fullTree1 <- rpart(IMDB_Rating~RuntimeMin,
+                  data=IMDB, 
+                  method="anova",
+                  control=rpart.control(
+                  minsplit=1,
+                  minbucket=1,
+                  cp=0
+                  
+                  ))
+
+rpart.plot(fullTree1)  
+```
+
+```{r}
+
+plotcp(fullTree1) 
+
+printcp(fullTree1) 
+
+## MIN ERROR
+which.min(fullTree1$cptable[,"xerror"])
+
+## WHICH CP
+fullTree1$cptable[which.min(fullTree1$cptable[,"xerror"]),"CP"]
+```
+
+```{r}
+pruneTree <- prune(fullTree1, cp=0.0113)   #prune the tree with cp=0.02
+
+printcp(pruneTree)
+
+rpart.plot(pruneTree)  
+```
+
+```{r}
+defaultTree3 <- rpart(IMDB_Rating~Certificate, data=IMDB, method="anova")
+
+rpart.plot(defaultTree3)
+
+fullTree3 <- rpart(IMDB_Rating~Certificate,
+                  data=IMDB, 
+                  method="anova",
+                  control=rpart.control(
+                  minsplit=1,
+                  minbucket=1,
+                  cp=0
+                  
+                  ))
+
+rpart.plot(fullTree3)  
+```
+```{r}
+
+plotcp(fullTree3) 
+
+printcp(fullTree3) 
+
+## MIN ERROR
+which.min(fullTree3$cptable[,"xerror"])
+
+## WHICH CP
+fullTree3$cptable[which.min(fullTree1$cptable[,"xerror"]),"CP"]
+```
+```{r}
+pruneTree <- prune(fullTree3, cp=0.0068)   #prune the tree with cp=0.02
+
+printcp(pruneTree)
+
+rpart.plot(pruneTree)  
+```
+
+
+```{r}
+defaultTree4 <- rpart(IMDB_Rating~genre1, data=IMDB, method="anova")
+
+rpart.plot(defaultTree4)
+
+fullTree4 <- rpart(IMDB_Rating~genre1,
+                  data=IMDB, 
+                  method="anova",
+                  control=rpart.control(
+                  minsplit=1,
+                  minbucket=1,
+                  cp=0
+                  
+                  ))
+
+rpart.plot(fullTree4)  
+```
+
+```{r}
+
+plotcp(fullTree4) 
+
+printcp(fullTree4) 
+
+## MIN ERROR
+which.min(fullTree4$cptable[,"xerror"])
+
+## WHICH CP
+fullTree4$cptable[which.min(fullTree1$cptable[,"xerror"]),"CP"]
+```
+
+```{r}
+pruneTree <- prune(fullTree4, cp=0.0068)   #prune the tree with cp=0.02
+
+printcp(pruneTree)
+
+rpart.plot(pruneTree)  
+```
+
+```{r}
+ummmmm<-lm(IMDB_Rating~Gross+RuntimeMin+Meta_score+Certificate+Released_Year, data=IMDB)
+summary(ummmmm)
+```
+
